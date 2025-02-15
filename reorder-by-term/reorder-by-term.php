@@ -3,12 +3,11 @@
 Plugin Name: Reorder by Term
 Plugin URI: https://wordpress.org/plugins/reorder-by-term/
 Description: Reorder Posts by Term
-Version: 1.2.3
+Version: 1.3.0
 Author: Ronald Huereca
 Author URI: https://github.com/ronalfy/reorder-by-term
 Text Domain: reorder-by-term
 Domain Path: /languages
-Requires Plugins: metronet-reorder-posts
 */
 
 /**
@@ -185,7 +184,7 @@ final class Reorder_By_Term {
 			$custom_field_terms[] = $custom_field_meta_key;
 			$term_count = $term->count;
 			if ( $term_count > 0 ) {
-				$term_count -= 1;
+				//$term_count -= 1;
 			}
 			$custom_fields_to_save[ $custom_field_meta_key ] = array(
 				'term_id' => $term->term_id,
@@ -196,14 +195,17 @@ final class Reorder_By_Term {
 		}
 
 		//Get existing custom fields
-		$custom_fields = get_post_custom_keys( $post_id );
+		$custom_fields = get_post_custom( $post_id );
 		if ( !is_array( $custom_fields ) ) $custom_fields = array();
 
 		//Loop through custom fields and see if it exists in our save array - if not, remove the post meta key
 		foreach( $custom_fields as $key => $custom_field ) {
-			if ( !in_array( $custom_field, $custom_field_terms ) && '_reorder_term_' == substr( $custom_field, 0, 14 ) ) {
-				delete_post_meta( $post_id, $custom_field );
-				unset( $custom_fields[ $key ] );
+			// Make sure custom field is a string before checking it's string position and array status.
+			if ( is_string( $custom_field ) && strpos( $custom_field, '_reorder_term_' ) === 0 ) {
+				if ( ! in_array( $custom_field, $custom_field_terms ) ) {
+					delete_post_meta( $post_id, $custom_field );
+					unset( $custom_fields[ $key ] );
+				}
 			}
 		}
 
