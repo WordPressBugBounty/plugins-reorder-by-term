@@ -3,12 +3,16 @@
 Plugin Name: Reorder by Term
 Plugin URI: https://wordpress.org/plugins/reorder-by-term/
 Description: Reorder Posts by Term
-Version: 1.3.0
+Version: 1.3.1
 Author: Ronald Huereca
 Author URI: https://github.com/ronalfy/reorder-by-term
 Text Domain: reorder-by-term
 Domain Path: /languages
 */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
 /**
  * Reorder Post by Term
@@ -39,8 +43,6 @@ final class Reorder_By_Term {
 	 * @access private
 	 */
 	private function __construct() {
-		//* Localization Code */
-		load_plugin_textdomain( 'reorder-by-term', false, dirname( plugin_basename( __FILE__ ) ) . '/languages/' );
 
 		if ( !class_exists( 'MN_Reorder' ) || !defined( 'REORDER_ALLOW_ADDONS' ) || ( false === REORDER_ALLOW_ADDONS ) ) {
 			add_action( 'admin_notices', array( $this, 'output_error_reorder_plugin' ) );//Output error
@@ -212,7 +214,7 @@ final class Reorder_By_Term {
 		//Loop through custom fields to save and see if custom field already exists - if so, unset it so we skip it
 		foreach( $custom_field_terms as $key => $custom_field_term ) {
 			if ( is_array( $custom_fields ) ) {
-				if ( in_array( $custom_field_term, $custom_fields ) ) {
+				if ( in_array( $custom_field_term, array_keys( $custom_fields ) ) ) {
 					unset( $custom_fields_to_save[ $custom_field_term ] );
 				}
 			}
