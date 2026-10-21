@@ -1,13 +1,16 @@
 <?php
 /*
 Plugin Name: Reorder by Term
-Plugin URI: https://wordpress.org/plugins/reorder-by-term/
+Plugin URI: https://mattc.link/reorder-by-term
 Description: Reorder Posts by Term
-Version: 1.3.1
-Author: Ronald Huereca
-Author URI: https://github.com/ronalfy/reorder-by-term
+Version: 1.3.2
+Requires at least: 6.5
+Requires PHP: 7.2
+Author: Roots & Fruit
+Author URI: https://mattc.link/reorder-by-term
 Text Domain: reorder-by-term
 Domain Path: /languages
+Requires Plugins: metronet-reorder-posts
 */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -44,6 +47,8 @@ final class Reorder_By_Term {
 	 */
 	private function __construct() {
 
+		add_action( 'in_plugin_update_message-reorder-by-term/reorder-by-term.php', array( $this, 'plugin_update_message' ), 10, 2 );
+
 		if ( !class_exists( 'MN_Reorder' ) || !defined( 'REORDER_ALLOW_ADDONS' ) || ( false === REORDER_ALLOW_ADDONS ) ) {
 			add_action( 'admin_notices', array( $this, 'output_error_reorder_plugin' ) );//Output error
 			return;
@@ -58,6 +63,9 @@ final class Reorder_By_Term {
 		//Add post save action
 		add_action( 'save_post', array( $this, 'add_custom_fields' ), 10, 2 );
 
+		// Term edits from the block editor and other plugins land after save_post.
+		add_action( 'deleted_term_relationships', array( $this, 'remove_reorder_meta_for_removed_terms' ), 10, 3 );
+
 		//For when Updating a Term
 		add_action( 'edit_terms', array( &$this, 'before_update_term' ), 10, 2 );
 		add_action( 'edited_term', array( &$this, 'after_update_term' ), 10, 3 );
@@ -69,6 +77,26 @@ final class Reorder_By_Term {
 		add_action( 'admin_init', array( $this, 'reorder_posts_admin_init' ), 12, 1 );
 
 
+	}
+
+	/**
+	 * Shows a note on the Plugins screen update row when the update does not already include an Upgrade Notice from WordPress.org.
+	 *
+	 * @param array  $plugin_data Installed plugin data.
+	 * @param object $response    Update response object.
+	 * @uses in_plugin_update_message-reorder-by-term/reorder-by-term.php WordPress action
+	 */
+	public function plugin_update_message( $plugin_data, $response ) {
+		unset( $plugin_data );
+		if ( is_object( $response ) && ! empty( $response->upgrade_notice ) ) {
+			return;
+		}
+		echo '<br />' . wp_kses(
+			__( '<strong>IMPORTANT:</strong> This update requires that the Reorder Posts plugin be active, and WordPress 6.5 or newer. If either is missing, the plugin cannot be updated or activated until both requirements are met.', 'reorder-by-term' ),
+			array(
+				'strong' => array(),
+			)
+		);
 	}
 
 	/**
@@ -154,6 +182,37 @@ final class Reorder_By_Term {
 	} //end after_update_term
 
 	/**
+	 * Deletes reorder meta when a post loses a term.
+	 *
+	 * The block editor and other plugins can change terms after save_post.
+	 * This runs when the term relationship itself is deleted.
+	 *
+	 * @param int    $object_id Object ID.
+	 * @param array  $tt_ids    Deleted term taxonomy IDs.
+	 * @param string $taxonomy  Taxonomy slug.
+	 * @uses deleted_term_relationships WordPress action
+	 */
+	public function remove_reorder_meta_for_removed_terms( $object_id, $tt_ids, $taxonomy ) {
+		$taxonomy_object = get_taxonomy( $taxonomy );
+		if ( ! is_object( $taxonomy_object ) || empty( $taxonomy_object->object_type ) ) {
+			return;
+		}
+
+		$post = get_post( $object_id );
+		if ( ! is_object( $post ) || ! in_array( $post->post_type, (array) $taxonomy_object->object_type, true ) ) {
+			return;
+		}
+
+		foreach ( (array) $tt_ids as $tt_id ) {
+			$term = get_term_by( 'term_taxonomy_id', (int) $tt_id );
+			if ( ! is_object( $term ) ) {
+				continue;
+			}
+			delete_post_meta( $object_id, sprintf( '_reorder_term_%s_%s', $term->taxonomy, $term->slug ) );
+		}
+	}
+
+	/**
 	 * Saves plugin's custom fields with menu order
 	 *
 	 * @author Ronald Huereca <ronalfy@gmail.com>
@@ -202,10 +261,10 @@ final class Reorder_By_Term {
 
 		//Loop through custom fields and see if it exists in our save array - if not, remove the post meta key
 		foreach( $custom_fields as $key => $custom_field ) {
-			// Make sure custom field is a string before checking it's string position and array status.
-			if ( is_string( $custom_field ) && strpos( $custom_field, '_reorder_term_' ) === 0 ) {
-				if ( ! in_array( $custom_field, $custom_field_terms ) ) {
-					delete_post_meta( $post_id, $custom_field );
+			// Meta values are arrays. Match the key so another plugin's values cannot skip this loop.
+			if ( is_string( $key ) && strpos( $key, '_reorder_term_' ) === 0 ) {
+				if ( ! in_array( $key, $custom_field_terms ) ) {
+					delete_post_meta( $post_id, $key );
 					unset( $custom_fields[ $key ] );
 				}
 			}
